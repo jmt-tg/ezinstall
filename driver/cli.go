@@ -20,6 +20,11 @@ func MustInitMongoClient(
 	if err != nil {
 		panic(err)
 	}
+	// ping
+	err = client.Ping(context.Background(), nil)
+	if err != nil {
+		panic(err)
+	}
 	MongoClient = client
 	MongoDatabase = client.Database(dbName)
 	MongoCollection = client.Database(dbName).Collection(collectionName)

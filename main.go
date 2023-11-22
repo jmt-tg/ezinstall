@@ -9,6 +9,7 @@ import (
 	"github.com/lionsoul2014/ip2region/binding/golang/xdb"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"log"
+	"os"
 	"strings"
 	"time"
 )
@@ -19,6 +20,30 @@ var (
 	mongoDB  = flag.String("d", "ezinstall", "mongo database")
 	mongoCol = flag.String("c", "open_record", "mongo collection")
 )
+
+func init() {
+	flag.Parse()
+	{
+		if v := os.Getenv("PORT"); v != "" {
+			*port = v
+		}
+	}
+	{
+		if v := os.Getenv("MONGO_URI"); v != "" {
+			*mongoUri = v
+		}
+	}
+	{
+		if v := os.Getenv("MONGO_DB"); v != "" {
+			*mongoDB = v
+		}
+	}
+	{
+		if v := os.Getenv("MONGO_COL"); v != "" {
+			*mongoCol = v
+		}
+	}
+}
 
 // 中国大陆的省份，不包括香港","澳门","台湾
 var chinaOutlandProvince = []string{
@@ -57,22 +82,41 @@ func getRegion(context *gin.Context) (string, bool, bool, driver.Region) {
 }
 
 func main() {
-	flag.Parse()
 	driver.MustInitMongoClient(*mongoUri, *mongoDB, *mongoCol)
 	engine := gin.Default()
-	engine.GET("/", func(context *gin.Context) {
+	// 跨域
+	engine.Use(func(context *gin.Context) {
+		context.Header("Access-Control-Allow-Origin", "*")
+		context.Header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
+		context.Header("Access-Control-Allow-Headers", "Content-Type,Authorization")
+		if context.Request.Method == "OPTIONS" {
+			context.AbortWithStatus(200)
+			return
+		}
+		context.Next()
+	})
+	handlers := func(context *gin.Context) {
 		type Req struct {
-			ChannelId string `json:"channelId"`
-			AppName   string `json:"appName"`
+			ChannelId string `form:"channelId"`
+			AppName   string `form:"appName"`
 		}
 		in := &Req{}
-		_ = context.ShouldBind(in)
+		_ = context.ShouldBindQuery(in)
+		// 获取请求域名
+		origin := context.GetHeader("Origin")
+		// 提取域名, 把http://或者https://去掉
+		origin = strings.TrimPrefix(origin, "http://")
+		origin = strings.TrimPrefix(origin, "https://")
+		// 把/后面的路径去掉
+		origin = strings.Split(origin, "/")[0]
 		ip, isChina, isChinaInland, region := getRegion(context)
-		if in.ChannelId != "" {
+		if in.ChannelId != "" && in.AppName != "" {
+			log.Printf("channelId: %s, appName: %s, ip: %s, region: %+v, isChina: %v, isChinaInland: %v\n", in.ChannelId, in.AppName, ip, region, isChina, isChinaInland)
 			m := &driver.OpenRecord{
 				ChannelId:      in.ChannelId,
 				AppName:        in.AppName,
 				Ip:             ip,
+				Origin:         origin,
 				Region:         region,
 				IsCountryChina: isChina,
 				IsChinaInland:  isChinaInland,
@@ -88,7 +132,9 @@ func main() {
 			"isChinaInland": isChinaInland,
 			"isChina":       isChinaInland,
 		})
-	})
+	}
+	engine.GET("/", handlers)
+	engine.POST("/", handlers)
 	fmt.Printf("listen on http://127.0.0.1:%s\n", *port)
 	engine.Run(":" + *port)
 }

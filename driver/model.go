@@ -17,11 +17,13 @@ type Region struct {
 }
 
 type OpenRecord struct {
-	Id             primitive.ObjectID  `bson:"_id"`
-	ChannelId      string              `bson:"channel_id"`
-	AppName        string              `bson:"app_name"`
-	Ip             string              `bson:"ip"`
-	Region         Region              `bson:"region"`
+	Id        primitive.ObjectID `bson:"_id,omitempty"`
+	ChannelId string             `bson:"channel_id"`
+	AppName   string             `bson:"app_name"`
+	Ip        string             `bson:"ip"`
+	Region    Region             `bson:"region"`
+	// 域名
+	Origin         string              `bson:"origin"`
 	IsCountryChina bool                `bson:"is_country_china"`
 	IsChinaInland  bool                `bson:"is_china_inland"`
 	CreatedAt      primitive.Timestamp `bson:"created_at"`
@@ -47,6 +49,7 @@ func (m *OpenRecord) Insert() error {
 	// 2. 记录ip
 	_, err = MongoCollection.InsertOne(context.Background(), m)
 	if err != nil {
+		log.Printf("insert open record error: %v", err)
 		return err
 	}
 	return nil
